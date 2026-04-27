@@ -7,6 +7,8 @@
 #include "connection.h"
 #include <string.h>
 
+// TODO decouple state
+
 typedef enum
 {
     MODE_MENU,
@@ -49,7 +51,6 @@ static void render_menu(void)
     attron(COLOR_PAIR(2));
     mvprintw(start_y + art_lines + 1, (cols - (int)strlen(subtitle)) / 2, "%s", subtitle);
     attroff(COLOR_PAIR(2));
-    mvprintw(start_y + art_lines + 1, (cols - (int)strlen(subtitle)) / 2, "%s", subtitle);
 
     const char *options[] = {"GEOMAP", "TRACEROUTE", "NETMAP"};
     int menu_y = start_y + art_lines + 4;
@@ -97,12 +98,14 @@ static void render_placeholder(const char *title)
 int main(void)
 {
     terminal_init();
+    connection_init();
     keypad(stdscr, TRUE); // enable arrow keys
 
     AppMode mode = MODE_MENU;
     bool running = true;
 
     while (running)
+    // TODO refactor nested conditions
     {
         int ch = getch();
         if (ch == 'q')
@@ -115,13 +118,9 @@ int main(void)
         {
         case MODE_MENU:
             if (ch == KEY_UP)
-            {
                 menu_selection = (menu_selection - 1 + MENU_ITEMS) % MENU_ITEMS;
-            }
             if (ch == KEY_DOWN)
-            {
                 menu_selection = (menu_selection + 1) % MENU_ITEMS;
-            }
             if (ch == '\n' || ch == KEY_ENTER)
             {
                 clear();
@@ -140,16 +139,63 @@ int main(void)
         case MODE_GEOMAP:
             if (ch == 27)
             {
+                focused_panel = FOCUS_NONE;
+                active_panel = 0;
                 mode = MODE_MENU;
                 clear();
                 refresh();
                 break;
+            }
+
+            if (ch == '\t')
+            {
+                active_panel = (active_panel + 1) % 3;
+                map_mark_dirty();
+                connection_mark_dirty();
+            }
+
+            if (ch == KEY_BTAB)
+            {
+                active_panel = (active_panel - 1 + 3) % 3;
+                map_mark_dirty();
+                connection_mark_dirty();
+            }
+
+            if (ch == 'f' || ch == 'F')
+            {
+                if (focused_panel != FOCUS_NONE)
+                {
+                    terminal_set_focus(FOCUS_NONE);
+                }
+                else
+                {
+                    if (active_panel == 0)
+                        terminal_set_focus(FOCUS_MAP);
+                    if (active_panel == 1)
+                        terminal_set_focus(FOCUS_CONN);
+                    if (active_panel == 2)
+                        terminal_set_focus(FOCUS_STATS);
+                }
+                clear();
+                refresh();
             }
             terminal_layout();
             map_update();
             connection_update();
             map_render();
             connection_render();
+            // TODO create render_stats func
+            if (win_stats)
+            {
+                if (active_panel == 2)
+                    wattron(win_stats, COLOR_PAIR(4));
+                box(win_stats, 0, 0);
+                if (active_panel == 2)
+                    wattroff(win_stats, COLOR_PAIR(4));
+
+                mvwprintw(win_stats, 0, 2, " STATISTICS ");
+                wrefresh(win_stats);
+            }
             break;
 
         case MODE_TRACEROUTE:
@@ -175,7 +221,7 @@ int main(void)
 
         usleep(100000);
     }
-
+    connection_cleanup();
     terminal_cleanup();
     return 0;
 }

@@ -1,5 +1,4 @@
 #include "connection.h"
-#include "terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,10 +6,31 @@
 #include <sys/proc_info.h>
 #include <libproc.h>
 #include <netinet/in.h>
+#include "hashmap.h"
+#include "geo.h"
+#include "terminal.h"
 
-static ConnInfo connections[MAX_CONNECTIONS]; // TODO => hasmap
+// TODO this module mainly for macos internals abstract it later (e.g. proc_pidinfo)
+
+static ConnInfo connections[MAX_CONNECTIONS];
 static int conn_count = 0;
 static bool dirty = true;
+
+static HashMap *geo_cache = NULL;
+
+void connection_init(void)
+{
+    geo_cache = hashmap_create(INITIAL_HASH_CAPACITY);
+}
+
+void connection_cleanup(void)
+{
+    if (geo_cache)
+    {
+        hashmap_destroy(geo_cache);
+        geo_cache = NULL;
+    }
+}
 
 static const char *tcp_state_str(int state)
 {
@@ -62,7 +82,8 @@ static int is_remote_ip(const char *ip)
     return 1;
 }
 
-// Returns 1 if connection was added, 0 if skipped
+// TODO re-enable with hashmap cache — disabled because blocking curl freezes TUI
+
 static int extract_connection(int pid, struct socket_fdinfo *sinfo)
 {
     if (conn_count >= MAX_CONNECTIONS)
@@ -82,24 +103,16 @@ static int extract_connection(int pid, struct socket_fdinfo *sinfo)
 
     struct in_sockinfo *in;
     if (proto == IPPROTO_TCP)
-    {
         in = &si->soi_proto.pri_tcp.tcpsi_ini;
-    }
     else
-    {
         in = &si->soi_proto.pri_in;
-    }
 
     if (family == AF_INET)
-    {
-        inet_ntop(AF_INET, &in->insi_faddr.ina_46.i46a_addr4, remote_ip, sizeof(remote_ip));
-    }
+        inet_ntop(AF_INET, &in->insi_faddr.ina_46.i46a_addr4, remote_ip, sizeof(remote_ip)); // inet_ntop => convert humanreadble IP addresses as char
     else
-    {
         inet_ntop(AF_INET6, &in->insi_faddr.ina_6, remote_ip, sizeof(remote_ip));
-    }
 
-    int local_port = ntohs(in->insi_lport);
+    int local_port = ntohs(in->insi_lport); // learn big-endian and little-endian
     int remote_port = ntohs(in->insi_fport);
 
     if (local_port == 0 && remote_port == 0)
@@ -114,12 +127,12 @@ static int extract_connection(int pid, struct socket_fdinfo *sinfo)
     c->tcp_state = (proto == IPPROTO_TCP) ? si->soi_proto.pri_tcp.tcpsi_state : 0;
     strncpy(c->remote_ip, remote_ip, sizeof(c->remote_ip) - 1);
     c->remote_ip[sizeof(c->remote_ip) - 1] = '\0';
+    strncpy(c->country, "-", sizeof(c->country));
+    strncpy(c->city, "-", sizeof(c->city));
 
     proc_name(pid, c->name, sizeof(c->name));
     if (strlen(c->name) == 0)
-    {
         snprintf(c->name, sizeof(c->name), "pid:%d", pid);
-    }
 
     conn_count++;
     return 1;
@@ -127,17 +140,16 @@ static int extract_connection(int pid, struct socket_fdinfo *sinfo)
 
 void connection_update(void)
 {
-    int pid_count = proc_listallpids(NULL, 0);
+    int pid_count = proc_listallpids(NULL, 0); // get all process id count with NULL to decide memory allocation
     // TODO add proper logger
     if (pid_count <= 0)
         return;
 
-    pid_t *pids = malloc(sizeof(pid_t) * pid_count);
+    pid_t *pids = malloc(sizeof(pid_t) * pid_count); // -> allocate it
     if (pids == NULL)
         return;
 
     pid_count = proc_listallpids(pids, sizeof(pid_t) * pid_count);
-
     conn_count = 0;
 
     for (int i = 0; i < pid_count; i++)
@@ -157,7 +169,7 @@ void connection_update(void)
 
         for (int j = 0; j < fd_count; j++)
         {
-            if (fds[j].proc_fdtype != PROX_FDTYPE_SOCKET)
+            if (fds[j].proc_fdtype != PROX_FDTYPE_SOCKET) // skip FD that isn't a socket
                 continue;
 
             struct socket_fdinfo sinfo;
@@ -173,8 +185,61 @@ void connection_update(void)
 
         free(fds);
     }
-
     free(pids);
+    char uncached[100][INET6_ADDRSTRLEN];
+    int uncached_count = 0;
+
+    // TODO implement dynamic array
+  for (int i = 0; i < conn_count; i++)
+    {
+        // check cache first
+        Entry *cached = hashmap_get(geo_cache, connections[i].remote_ip);
+        if (cached)
+        {
+            // cache hit — use stored data
+            strncpy(connections[i].country, cached->value.country, sizeof(connections[i].country) - 1);
+            strncpy(connections[i].city, cached->value.city, sizeof(connections[i].city) - 1);
+            continue;
+        }
+
+        bool already_queued = false;
+        for (int j = 0; j < uncached_count; j++)
+        {
+            if (strcmp(uncached[j], connections[i].remote_ip) == 0)
+            {
+                already_queued = true;
+                break;
+            }
+        }
+
+        if (!already_queued && uncached_count < 100)
+        {
+            strncpy(uncached[uncached_count], connections[i].remote_ip, INET6_ADDRSTRLEN - 1);
+            uncached[uncached_count][INET6_ADDRSTRLEN - 1] = '\0';
+            uncached_count++;
+        }
+    }
+
+    // only call API if there are new IPs
+    if (uncached_count > 0)
+    {
+        geo_batch_lookup(uncached, uncached_count, geo_cache);
+
+        // fill newly cached data into connections that were skipped
+        for (int i = 0; i < conn_count; i++)
+        {
+            if (strcmp(connections[i].country, "-") == 0)
+            {
+                Entry *cached = hashmap_get(geo_cache, connections[i].remote_ip);
+                if (cached)
+                {
+                    strncpy(connections[i].country, cached->value.country, sizeof(connections[i].country) - 1);
+                    strncpy(connections[i].city, cached->value.city, sizeof(connections[i].city) - 1);
+                }
+            }
+        }
+    }
+
     dirty = true;
 }
 
@@ -184,7 +249,13 @@ void connection_render(void)
         return;
 
     werase(win_conn);
+
+    if (active_panel == 1)
+        wattron(win_conn, COLOR_PAIR(4));
     box(win_conn, 0, 0);
+    if (active_panel == 1)
+        wattroff(win_conn, COLOR_PAIR(4));
+
     mvwprintw(win_conn, 0, 2, " CONNECTIONS (%d) ", conn_count);
 
     int win_rows, win_cols;
@@ -205,7 +276,7 @@ void connection_render(void)
         const char *state_str = (c->proto == IPPROTO_TCP) ? tcp_state_str(c->tcp_state) : "-";
         // TODO implement hashmap
         mvwprintw(win_conn, 2 + i, 2, "%-24s %-8s %-44s %-8d %-14s %-16s %-16s",
-                  c->name, proto_str, c->remote_ip, c->remote_port, state_str, "-", "-");
+                  c->name, proto_str, c->remote_ip, c->remote_port, state_str, c->country, c->city);
     }
 
     wrefresh(win_conn);

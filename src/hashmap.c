@@ -95,13 +95,13 @@ void hashmap_set(HashMap *hashmap, const char *key, const CacheEntry *value)
 
     double load_factor = (double)hashmap->count / hashmap->capacity; // why (double) cast required?
     double threshold = 0.75;
-    fprintf(stderr, "DEBUG: load_factor=%.2f >= threshold=%.2f ? %s\n",
+/*     fprintf(stderr, "DEBUG: load_factor=%.2f >= threshold=%.2f ? %s\n",
             load_factor, threshold,
-            (load_factor >= threshold) ? "YES - RESIZE" : "NO");
+            (load_factor >= threshold) ? "YES - RESIZE" : "NO"); */
     // resize bucket
     if (load_factor >= threshold)
     {
-        fprintf(stderr, "\n\n ========= resize beginning =========\n");
+        // fprintf(stderr, "\n\n ========= resize beginning =========\n");
         // reindexing because -> 200 % 64 = index_8 200 % 128 = index_72
         Entry **old_buckets = hashmap->buckets;
         int old_capacity = hashmap->capacity;
@@ -129,7 +129,7 @@ void hashmap_set(HashMap *hashmap, const char *key, const CacheEntry *value)
         free(old_buckets);
     }
     uint32_t index = hashmap_hash(key) % hashmap->capacity; // normalize hash with module and distribute as index
-    printf("hash ========> : %" PRIu32 "\n", index);
+    // printf("hash ========> : %" PRIu32 "\n", index);
     Entry *current = hashmap->buckets[index];
     while (current != NULL)
     {
@@ -147,7 +147,6 @@ void hashmap_set(HashMap *hashmap, const char *key, const CacheEntry *value)
         fprintf(stderr, "hashmap_set Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
-    fprintf(stderr, "DEBUG: Copying key: %s\n", key);
     strncpy(node->key, key, sizeof(node->key) - 1);
     node->key[sizeof(node->key) - 1] = '\0';
     node->value = *value;

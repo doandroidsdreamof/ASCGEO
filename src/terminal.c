@@ -1,12 +1,33 @@
 #include "terminal.h"
 #include <signal.h>
 #include "map.h"
+#include "connection.h"
+
+//* feature ideas:
+/*
+ - bandwidth per connection
+ - export/snapshot as JSON
+ - connection timeline
+ - passive OS fingerprinting of remote hosts
+ - DNS leak detection
+ - dependency connection audit
+ - docker/container network inspector
+ - database connection pool monitor
+*/
 
 WINDOW *win_map = NULL;
 WINDOW *win_conn = NULL;
 WINDOW *win_stats = NULL;
 
 static volatile bool needs_resize = false;
+FocusPanel focused_panel = FOCUS_NONE;
+int active_panel = 0;
+
+void terminal_set_focus(FocusPanel panel)
+{
+    focused_panel = panel;
+    needs_resize = true;
+}
 
 static void handle_resize(int sig)
 {
@@ -26,6 +47,7 @@ void terminal_init(void)
     init_pair(1, COLOR_CYAN, -1);   // ASCGEO title
     init_pair(2, COLOR_CYAN, -1);   // subtitle
     init_pair(3, COLOR_YELLOW, -1); // menu items
+    init_pair(4, COLOR_BLUE, -1);   // active panel border
 
     signal(SIGWINCH, handle_resize);
     needs_resize = true; // force initial layout
@@ -54,14 +76,36 @@ void terminal_layout(void)
     int rows = LINES; // ncurses global: terminal height
     int cols = COLS;  // ncurses global: terminal width
 
-    // split: 70% map, 25% connections, 5% 
-    int map_rows = rows * 70 / 100;
-    int conn_rows = rows * 25 / 100;
-    int stats_rows = rows - map_rows - conn_rows;
-    if (stats_rows < 2)
-        stats_rows = 2;
+    int map_rows, conn_rows, stats_rows;
 
-    // destroy old windows
+    switch (focused_panel)
+    {
+    case FOCUS_MAP:
+        map_rows = rows;
+        conn_rows = 0;
+        stats_rows = 0;
+        break;
+    case FOCUS_CONN:
+        map_rows = 0;
+        conn_rows = rows;
+        stats_rows = 0;
+        break;
+    case FOCUS_STATS:
+        map_rows = 0;
+        conn_rows = 0;
+        stats_rows = rows;
+
+        break;
+    default:
+        // split: 60% map, 25% connections, 15% stats
+        map_rows = rows * 60 / 100;
+        conn_rows = rows * 25 / 100;
+        stats_rows = rows - map_rows - conn_rows;
+        if (stats_rows < 3)
+            stats_rows = 3;
+        break;
+    }
+
     if (win_map)
         delwin(win_map);
     if (win_conn)
@@ -69,23 +113,36 @@ void terminal_layout(void)
     if (win_stats)
         delwin(win_stats);
 
-    // newwin(height, width, start_row, start_col)
-    win_map = newwin(map_rows, cols, 0, 0);
-    win_conn = newwin(conn_rows, cols, map_rows, 0);
-    win_stats = newwin(stats_rows, cols, map_rows + conn_rows, 0);
+    win_map = NULL;
+    win_conn = NULL;
+    win_stats = NULL;
 
-    box(win_map, 0, 0);
-    box(win_conn, 0, 0);
-    box(win_stats, 0, 0);
-
-    mvwprintw(win_stats, 0, 2, " STATISTICS ");
-    mvwprintw(win_stats, 1, 2, "Connections: 12  | TCP: 10  | UDP: 2");
-
-    wrefresh(win_map);
-    wrefresh(win_conn);
-    wrefresh(win_stats);
-
+    int y = 0;
+    if (map_rows > 0)
+    {
+        win_map = newwin(map_rows, cols, y, 0);
+        box(win_map, 0, 0);
+        wrefresh(win_map);
+        y += map_rows;
+    }
+    if (conn_rows > 0)
+    {
+        win_conn = newwin(conn_rows, cols, y, 0);
+        box(win_conn, 0, 0);
+        wrefresh(win_conn);
+        y += conn_rows;
+    }
+    if (stats_rows > 0)
+    {
+        win_stats = newwin(stats_rows, cols, y, 0);
+        box(win_stats, 0, 0);
+        // mvwprintw(win_stats, 1, 2, "Connections: 12  | TCP: 10  | UDP: 2");
+        // mvwprintw(win_stats, 1, 2, "Connections: %d", connection_count());
+        wrefresh(win_stats);
+        y += stats_rows;
+    }
     map_mark_dirty();
+    connection_mark_dirty();
     needs_resize = false;
 }
 

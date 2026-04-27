@@ -88,7 +88,11 @@ void map_render(void)
         return;
 
     werase(win_map);
+    if (active_panel == 0 && focused_panel == FOCUS_NONE)
+        wattron(win_map, COLOR_PAIR(4));
     box(win_map, 0, 0);
+    if (active_panel == 0 && focused_panel == FOCUS_NONE)
+        wattroff(win_map, COLOR_PAIR(4));
     mvwprintw(win_map, 0, 2, " WORLD MAP ");
 
     int win_rows, win_cols;

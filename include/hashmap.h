@@ -18,6 +18,7 @@ typedef struct
     char city[128];
     double lat;
     double lon;
+    bool is_pending;
     time_t timestamp; // when this entry was cached (epoch seconds)
 } CacheEntry;
 
@@ -42,6 +43,5 @@ void hashmap_set(HashMap *hashmap, const char *key, const CacheEntry *value);
 Entry *hashmap_get(HashMap *hashmap, const char *key);
 bool hashmap_delete(HashMap *hashmap, const char *key);
 void hashmap_destroy(HashMap *hashmap);
-
 
 #endif

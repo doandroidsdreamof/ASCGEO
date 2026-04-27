@@ -6,6 +6,7 @@
 #include "map.h"
 #include "connection.h"
 #include <string.h>
+#include "hashmap.h"
 
 // TODO decouple state
 

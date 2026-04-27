@@ -44,10 +44,12 @@ void terminal_init(void)
     nodelay(stdscr, TRUE); // non-blocking getch (so game loop doesn't stall)
     start_color();
     use_default_colors();
-    init_pair(1, COLOR_CYAN, -1);   // ASCGEO title
+    init_pair(1, COLOR_CYAN, -1);   // ASCGEO title 
     init_pair(2, COLOR_CYAN, -1);   // subtitle
     init_pair(3, COLOR_YELLOW, -1); // menu items
     init_pair(4, COLOR_BLUE, -1);   // active panel border
+    init_pair(5, COLOR_RED, -1);   // marker color
+
 
     signal(SIGWINCH, handle_resize);
     needs_resize = true; // force initial layout

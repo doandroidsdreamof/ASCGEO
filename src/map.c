@@ -3,6 +3,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include "geo.h"
+#include "connection.h"
 
 static char map_buffer[MAP_MAX_ROWS][MAP_MAX_COLS + 1];
 static bool dirty = true;
@@ -117,9 +119,50 @@ void map_render(void)
 
     for (int i = 0; i < rows_to_draw; i++)
     {
-        // Print starting at pad_top + 1, pad_left + 1
         mvwprintw(win_map, pad_top + 1 + i, pad_left + 1, "%.*s",
                   inner_cols - pad_left, map_buffer[i]);
+    }
+
+    ConnInfo *conns = connection_get_connections();
+    HashMap *cache = connection_get_cache();
+    int conn_count = connection_count();
+
+    // TODO padding logic for overlapping  markers
+    // TODO fix full-size update bug
+    for (int i = 0; i < conn_count; i++)
+
+    {
+
+        Entry *cached = hashmap_get(cache, conns[i].remote_ip);
+        if (!cached || cached->value.is_pending)
+            continue;
+        if (cached->value.lat == 0.0 && cached->value.lon == 0.0)
+            continue;
+
+        bool already_plotted = false;
+        for (int j = 0; j < i; j++)
+        {
+            if (strcmp(conns[j].remote_ip, conns[i].remote_ip) == 0)
+            {
+                already_plotted = true;
+                break;
+            }
+        }
+        if (already_plotted)
+            continue;
+
+        int col = (int)((cached->value.lon + 180.0) / 360.0 * current_cols);
+        int row = (int)((90.0 - cached->value.lat) / 180.0 * current_rows);
+
+        int screen_y = pad_top + 1 + row;
+        int screen_x = pad_left + 1 + col;
+
+        if (screen_y > 0 && screen_y <= inner_rows && screen_x > 0 && screen_x <= inner_cols)
+        {
+            wattron(win_map, COLOR_PAIR(5) | A_CHARTEXT);
+            mvwprintw(win_map, screen_y, screen_x, "[%d]", i);
+            wattroff(win_map, COLOR_PAIR(5) | A_CHARTEXT);
+        }
     }
 
     wrefresh(win_map);

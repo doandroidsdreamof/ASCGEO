@@ -9,6 +9,7 @@
 #include "hashmap.h"
 #include "geo.h"
 #include "terminal.h"
+#include "map.h"
 
 // TODO this module mainly for macos internals abstract it later (e.g. proc_pidinfo)
 
@@ -186,55 +187,55 @@ void connection_update(void)
         free(fds);
     }
     free(pids);
-    char uncached[100][INET6_ADDRSTRLEN];
-    int uncached_count = 0;
 
-    // TODO implement dynamic array
-  for (int i = 0; i < conn_count; i++)
+    static time_t last_geo_lookup = 0;
+    time_t now = time(NULL);
+    bool has_pending = false;
+
+    for (int i = 0; i < conn_count; i++)
     {
-        // check cache first
         Entry *cached = hashmap_get(geo_cache, connections[i].remote_ip);
-        if (cached)
+        if (cached && !cached->value.is_pending)
         {
-            // cache hit — use stored data
+            strncpy(connections[i].city, cached->value.city, sizeof(connections[i].city) - 1); // why -1
+            connections[i].city[sizeof(connections[i].city) - 1] = '\0';
             strncpy(connections[i].country, cached->value.country, sizeof(connections[i].country) - 1);
-            strncpy(connections[i].city, cached->value.city, sizeof(connections[i].city) - 1);
-            continue;
+            connections[i].country[sizeof(connections[i].country) - 1] = '\0';
         }
-
-        bool already_queued = false;
-        for (int j = 0; j < uncached_count; j++)
+        else if (!cached)
         {
-            if (strcmp(uncached[j], connections[i].remote_ip) == 0)
-            {
-                already_queued = true;
-                break;
-            }
-        }
-
-        if (!already_queued && uncached_count < 100)
-        {
-            strncpy(uncached[uncached_count], connections[i].remote_ip, INET6_ADDRSTRLEN - 1);
-            uncached[uncached_count][INET6_ADDRSTRLEN - 1] = '\0';
-            uncached_count++;
+            CacheEntry pending = {0}; //  all remaining fields are zero-initialized
+            pending.is_pending = true;
+            hashmap_set(geo_cache, connections[i].remote_ip, &pending);
         }
     }
 
-    // only call API if there are new IPs
-    if (uncached_count > 0)
+    for (int i = 0; i < conn_count; i++)
     {
-        geo_batch_lookup(uncached, uncached_count, geo_cache);
+        Entry *cached = hashmap_get(geo_cache, connections[i].remote_ip);
+        if (cached && cached->value.is_pending)
+        {
+            has_pending = true;
+            break;
+        }
+    }
 
-        // fill newly cached data into connections that were skipped
+    if (has_pending && (now - last_geo_lookup >= 2)) // 2 sec
+    {
+        geo_batch_lookup(geo_cache);
+        last_geo_lookup = now;
         for (int i = 0; i < conn_count; i++)
         {
-            if (strcmp(connections[i].country, "-") == 0)
+            // true
+            if (strcmp(connections[i].country, "-") == 0 && strcmp(connections[i].city, "-") == 0)
             {
                 Entry *cached = hashmap_get(geo_cache, connections[i].remote_ip);
-                if (cached)
+                if (cached && !cached->value.is_pending)
                 {
+                    strncpy(connections[i].city, cached->value.city, sizeof(connections[i].city) - 1); // why -1
+                    connections[i].city[sizeof(connections[i].city) - 1] = '\0';
                     strncpy(connections[i].country, cached->value.country, sizeof(connections[i].country) - 1);
-                    strncpy(connections[i].city, cached->value.city, sizeof(connections[i].city) - 1);
+                    connections[i].country[sizeof(connections[i].country) - 1] = '\0';
                 }
             }
         }
@@ -263,22 +264,21 @@ void connection_render(void)
     (void)win_cols;
 
     // Header row
-    mvwprintw(win_conn, 1, 2, "%-24s %-8s %-44s %-8s %-14s %-16s %-16s",
-              "PROCESS", "PROTO", "REMOTE", "PORT", "STATE", "COUNTRY", "CITY");
+mvwprintw(win_conn, 1, 2, "%-4s %-24s %-8s %-44s %-8s %-14s %-16s %-16s",
+              "#", "PROCESS", "PROTO", "REMOTE", "PORT", "STATE", "COUNTRY", "CITY");
 
     int inner_rows = win_rows - 3; // box top + header + box bottom
     int rows_to_draw = (conn_count < inner_rows) ? conn_count : inner_rows;
 
-    for (int i = 0; i < rows_to_draw; i++)
+for (int i = 0; i < rows_to_draw; i++)
     {
         ConnInfo *c = &connections[i];
         const char *proto_str = (c->proto == IPPROTO_TCP) ? "TCP" : "UDP";
         const char *state_str = (c->proto == IPPROTO_TCP) ? tcp_state_str(c->tcp_state) : "-";
-        // TODO implement hashmap
-        mvwprintw(win_conn, 2 + i, 2, "%-24s %-8s %-44s %-8d %-14s %-16s %-16s",
-                  c->name, proto_str, c->remote_ip, c->remote_port, state_str, c->country, c->city);
+mvwprintw(win_conn, 2 + i, 2, "%-4d %-24s %-8s %-44s %-8d %-14s %-16s %-16s",
+                  i, c->name, proto_str, c->remote_ip, c->remote_port, state_str, c->country, c->city);
     }
-
+    map_mark_dirty();
     wrefresh(win_conn);
     dirty = false;
 }
@@ -291,4 +291,13 @@ void connection_mark_dirty(void)
 int connection_count(void)
 {
     return conn_count;
+}
+
+ConnInfo *connection_get_connections(void)
+{
+    return connections;
+}
+
+HashMap *connection_get_cache(void){
+    return geo_cache;
 }

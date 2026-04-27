@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// TODO write tests for collison and resize 
+// TODO write tests for collison and resize
 void hashmap_print(HashMap *hashmap)
 {
     fprintf(stderr, "\n=== HashMap [%d entries, %d buckets, load=%.2f] ===\n",
@@ -95,9 +95,9 @@ void hashmap_set(HashMap *hashmap, const char *key, const CacheEntry *value)
 
     double load_factor = (double)hashmap->count / hashmap->capacity; // why (double) cast required?
     double threshold = 0.75;
-/*     fprintf(stderr, "DEBUG: load_factor=%.2f >= threshold=%.2f ? %s\n",
-            load_factor, threshold,
-            (load_factor >= threshold) ? "YES - RESIZE" : "NO"); */
+    /*     fprintf(stderr, "DEBUG: load_factor=%.2f >= threshold=%.2f ? %s\n",
+                load_factor, threshold,
+                (load_factor >= threshold) ? "YES - RESIZE" : "NO"); */
     // resize bucket
     if (load_factor >= threshold)
     {
@@ -196,7 +196,7 @@ bool hashmap_delete(HashMap *hashmap, const char *key)
             Entry *temp = current;
             if (prev == NULL) // removing head, promote next node/NULL to head
             {
-                hashmap->buckets[index] = current->next; 
+                hashmap->buckets[index] = current->next;
             }
             else
             {
@@ -223,12 +223,12 @@ void hashmap_destroy(HashMap *hashmap)
         {
             continue;
         }
-        while (entry)
+        while (entry != NULL)
         {
             Entry *next = entry->next;
             Entry *temp = entry; // can it be unnecessarily
             free(temp);
-            entry = next; 
+            entry = next;
         }
     }
     /*
@@ -238,3 +238,4 @@ void hashmap_destroy(HashMap *hashmap)
     free(hashmap->buckets);
     free(hashmap);
 }
+

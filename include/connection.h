@@ -3,6 +3,7 @@
 
 #include <netinet/in.h>
 #include <stdbool.h>
+#include "hashmap.h"
 
 #define MAX_CONNECTIONS 256
 #define CONN_NAME_LEN 256
@@ -16,6 +17,8 @@ typedef struct {
     int tcp_state;
     char country[64];
     char city[128];
+    double lat;
+    double lon;
 } ConnInfo;
 
 void connection_update(void);
@@ -24,5 +27,6 @@ void connection_mark_dirty(void);
 int connection_count(void);
 void connection_init(void);
 void connection_cleanup(void);
-
+ConnInfo *connection_get_connections(void);
+HashMap *connection_get_cache(void);
 #endif

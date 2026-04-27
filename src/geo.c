@@ -4,27 +4,37 @@
 #include <string.h>
 #include <time.h>
 #include <ncurses.h>
+#include "hashmap.h"
 
-void geo_batch_lookup(char ips[][INET6_ADDRSTRLEN], int count, HashMap *cache)
+void geo_batch_lookup(HashMap *cache)
 {
-    fprintf(stderr, "[GEO] batch_lookup called with %d IPs\n", count);
-
-    if (count <= 0 || count > 100)
-    {
-        fprintf(stderr, "[GEO] invalid count %d, skipping\n", count);
-        return;
-    }
 
     cJSON *array = cJSON_CreateArray();
-    for (int i = 0; i < count; i++)
+     int count = 0;
+     
+    for (int i = 0; i < cache->capacity; i++)
     {
-        // fprintf(stderr, "[GEO] queuing IP: %s\n", ips[i]);
-        cJSON *obj = cJSON_CreateObject();
-        cJSON_AddStringToObject(obj, "query", ips[i]);
-        cJSON_AddStringToObject(obj, "fields", "status,country,city,lat,lon,query");
-        cJSON_AddItemToArray(array, obj);
-    }
+        Entry *entry = cache->buckets[i];
+        while (entry != NULL)
+        {
+            if (entry->value.is_pending)
+            {
 
+                cJSON *obj = cJSON_CreateObject();
+                cJSON_AddStringToObject(obj, "query", entry->key);
+                cJSON_AddStringToObject(obj, "fields", "status,country,city,lat,lon,query");
+                cJSON_AddItemToArray(array, obj);
+                count++;
+            }
+
+            entry = entry->next;
+        }
+    }
+  if (count == 0)
+    {
+        cJSON_Delete(array);
+        return;
+    }
     char *json_str = cJSON_PrintUnformatted(array);
     cJSON_Delete(array);
     if (json_str == NULL)
@@ -45,9 +55,7 @@ void geo_batch_lookup(char ips[][INET6_ADDRSTRLEN], int count, HashMap *cache)
     fclose(tmp);
     free(json_str);
 
-
     def_prog_mode(); // Save current ncurses terminal settings
-
 
     FILE *fp = popen(
         "curl -s -X POST 'http://ip-api.com/batch' "
@@ -117,7 +125,7 @@ void geo_batch_lookup(char ips[][INET6_ADDRSTRLEN], int count, HashMap *cache)
         if (cJSON_IsNumber(lon))
             entry.lon = lon->valuedouble;
         entry.timestamp = time(NULL);
-
+        entry.is_pending = false; 
         hashmap_set(cache, query->valuestring, &entry);
     }
 

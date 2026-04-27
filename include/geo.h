@@ -3,6 +3,6 @@
 
 #include "hashmap.h"
 
-void geo_batch_lookup(char ips[][INET6_ADDRSTRLEN], int count, HashMap *cache);
+void geo_batch_lookup(HashMap *cache);
 
 #endif

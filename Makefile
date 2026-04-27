@@ -28,7 +28,11 @@ $(OBJ_DIR):
 run: $(TARGET)
 	./$(TARGET)
 
+debug: $(TARGET)
+	sudo lldb ./$(TARGET)
+	
+
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
 
-.PHONY: all clean run
+.PHONY: all clean run debug

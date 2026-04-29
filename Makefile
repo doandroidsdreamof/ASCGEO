@@ -8,6 +8,7 @@ LDFLAGS = -lncurses
 SRC_DIR = src
 OBJ_DIR = build
 INC_DIR = include
+LDFLAGS = -lncurses -lm
 
 SRC = $(wildcard $(SRC_DIR)/*.c)
 OBJ = $(SRC:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)

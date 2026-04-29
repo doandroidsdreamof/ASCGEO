@@ -77,34 +77,34 @@ void terminal_layout(void)
 
     int rows = LINES; // ncurses global: terminal height
     int cols = COLS;  // ncurses global: terminal width
-
-    int map_rows, conn_rows, stats_rows;
+    // stats_rows
+    int map_rows, conn_rows;
 
     switch (focused_panel)
     {
     case FOCUS_MAP:
         map_rows = rows;
         conn_rows = 0;
-        stats_rows = 0;
+        // stats_rows = 0;
         break;
     case FOCUS_CONN:
         map_rows = 0;
         conn_rows = rows;
-        stats_rows = 0;
+        // stats_rows = 0;
         break;
-    case FOCUS_STATS:
+/*     case FOCUS_STATS:
         map_rows = 0;
         conn_rows = 0;
         stats_rows = rows;
-
+ */
         break;
     default:
-        // split: 60% map, 25% connections, 15% stats
-        map_rows = rows * 60 / 100;
-        conn_rows = rows * 25 / 100;
-        stats_rows = rows - map_rows - conn_rows;
-        if (stats_rows < 3)
-            stats_rows = 3;
+        // split: 70% map, 30% connections
+        map_rows = rows * 70 / 100;
+        conn_rows = rows * 30 / 100;
+       // stats_rows = rows - map_rows - conn_rows;
+  /*       if (stats_rows < 3)
+            stats_rows = 3; */
         break;
     }
 
@@ -112,8 +112,8 @@ void terminal_layout(void)
         delwin(win_map);
     if (win_conn)
         delwin(win_conn);
-    if (win_stats)
-        delwin(win_stats);
+  /*   if (win_stats)
+        delwin(win_stats); */
 
     win_map = NULL;
     win_conn = NULL;
@@ -134,7 +134,7 @@ void terminal_layout(void)
         wrefresh(win_conn);
         y += conn_rows;
     }
-    if (stats_rows > 0)
+  /*   if (stats_rows > 0)
     {
         win_stats = newwin(stats_rows, cols, y, 0);
         box(win_stats, 0, 0);
@@ -142,7 +142,7 @@ void terminal_layout(void)
         // mvwprintw(win_stats, 1, 2, "Connections: %d", connection_count());
         wrefresh(win_stats);
         y += stats_rows;
-    }
+    } */
     map_mark_dirty();
     connection_mark_dirty();
     needs_resize = false;

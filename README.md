@@ -8,7 +8,7 @@ Terminal-based network visualization tool built in C with ncurses.
 ## Modes
 
 - **GEOMAP** — Live world map with active network connections, process info, remote IPs, ports, TCP state. *(in progress)*
-- **TRACEROUTE** — Custom traceroute implementation with ASCII path visualization. *(in progress)*
+- **ASCROUTE** — Traceroute implementation with ASCII path visualization. *(in progress)*
 - **NETMAP** — Local network topology mapper using ARP and OUI vendor lookup. *(in progress)*
 
 ## Build

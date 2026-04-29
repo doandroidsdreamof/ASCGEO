@@ -7,6 +7,7 @@
 #include "connection.h"
 #include <string.h>
 #include "hashmap.h"
+#include "netmap.h"
 
 // TODO decouple state
 
@@ -14,7 +15,7 @@ typedef enum
 {
     MODE_MENU,
     MODE_GEOMAP,
-    MODE_TRACEROUTE,
+    MODE_ASCROUTE,
     MODE_NETMAP
 } AppMode;
 
@@ -129,7 +130,7 @@ int main(void)
                 if (menu_selection == 0)
                     mode = MODE_GEOMAP;
                 if (menu_selection == 1)
-                    mode = MODE_TRACEROUTE;
+                    mode = MODE_ASCROUTE;
                 if (menu_selection == 2)
                     mode = MODE_NETMAP;
                 break;
@@ -186,7 +187,7 @@ int main(void)
             map_render();
             connection_render();
             // TODO create render_stats func
-            if (win_stats)
+  /*           if (win_stats)
             {
                 if (active_panel == 2)
                     wattron(win_stats, COLOR_PAIR(4));
@@ -196,11 +197,11 @@ int main(void)
 
                 mvwprintw(win_stats, 0, 2, " STATISTICS ");
                 wrefresh(win_stats);
-            }
+            } */
             break;
 
-        case MODE_TRACEROUTE:
-            render_placeholder("TRACEROUTE");
+        case MODE_ASCROUTE:
+            render_placeholder("ASCROUTE");
             if (ch == 27)
             {
                 mode = MODE_MENU;
@@ -210,18 +211,24 @@ int main(void)
             break;
 
         case MODE_NETMAP:
-            render_placeholder("NETMAP");
             if (ch == 27)
             {
+                terminal_set_focus(FOCUS_NONE);
                 mode = MODE_MENU;
                 clear();
                 refresh();
+                break;
             }
+            terminal_set_focus(FOCUS_MAP);
+            terminal_layout();
+            netmap_update();
+            netmap_render();
             break;
         }
 
         usleep(100000);
     }
+    // netmap_cleanup();
     connection_cleanup();
     terminal_cleanup();
     return 0;
